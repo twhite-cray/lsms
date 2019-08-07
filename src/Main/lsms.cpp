@@ -51,6 +51,7 @@
 #include "Misc/readLastLine.hpp"
 
 #include "writeInfoEvec.cpp"
+#include "write_restart.hpp"
 
 SphericalHarmonicsCoeficients sphericalHarmonicsCoeficients;
 GauntCoeficients gauntCoeficients;
@@ -258,6 +259,8 @@ int main(int argc, char *argv[])
   {
     fprintf(stdout,"LIZ for atom 0 on this node\n");
     printLIZInfo(stdout, local.atom[0]);
+    if(local.atom[0].forceZeroMoment)
+      fprintf(stdout,"\nMagnetic moment of atom 0 forced to be zero!\n\n");
   }
   if (lsms.global.iprint >= 1)
   {
@@ -399,7 +402,8 @@ int main(int argc, char *argv[])
     kFile = fopen("k.out","a");
   }
 
-  for (int iteration=0; iteration<lsms.nscf && !converged; iteration++)
+  int iteration;
+  for (iteration=0; iteration<lsms.nscf && !converged; iteration++)
   {
     if (lsms.global.iprint >= 0)
       printf("SCF iteration %d:\n", iteration);
@@ -425,6 +429,7 @@ int main(int argc, char *argv[])
     // Calculate charge densities, potentials, and total energy
     calculateAllLocalChargeDensities(lsms, local);
     calculateChargesPotential(comm, lsms, local, crystal, 0);
+    checkAllLocalCharges(lsms, local);
     calculateTotalEnergy(comm, lsms, local, crystal);
 
     // Mix charge density
@@ -464,6 +469,13 @@ int main(int argc, char *argv[])
       printf("Fermi Energy = %lf Ry\n", lsms.chempot);
       printf("Total Energy = %lf Ry\n", lsms.totalEnergy);
       printf("RMS = %lg\n",rms);
+      printf("  qrms[0] = %lg   qrms[1] = %lg\n",local.qrms[0], local.qrms[1]);
+      printf("  local.atom[i]:\n");
+      for (int i=0; i<local.num_local; i++)
+      {
+        printf("  %d : qrms[0] = %lg   qrms[1] = %lg\n",i,local.atom[i].qrms[0], local.atom[i].qrms[1]);
+        printf("  %d : vrms[0] = %lg   vrms[1] = %lg\n",i,local.atom[i].vrms[0], local.atom[i].vrms[1]);
+      }
     }
 
     if (kFile != NULL)
@@ -483,19 +495,27 @@ int main(int argc, char *argv[])
     if ((lsms.pot_out_type >= 0 && potentialWriteCounter >= lsms.writeSteps)
         || converged)
     {
-      if (comm.rank == 0) std::cout << "Writing new potentials.\n";
+      if (comm.rank == 0) std::cout << "Writing new potentials and restart file.\n";
       writePotentials(comm, lsms, crystal, local);
       potentialWriteCounter = 0;
+      if (comm.rank == 0)
+      { 
+        writeRestart("i_lsms.restart", lsms, crystal, mix, potentialShifter, alloyDesc);
+      }
     }
 
   }
 
+ timeScfLoop = MPI_Wtime() - timeScfLoop;
+  
   writeInfoEvec(comm, lsms, crystal, local, eband, lsms.infoEvecFileOut);
+  if(lsms.localAtomDataFile[0]!=0)
+    writeLocalAtomData(comm, lsms, crystal, local, eband, lsms.localAtomDataFile);
 
   if (kFile != NULL)
     fclose(kFile);
 
-  timeScfLoop = MPI_Wtime() - timeScfLoop;
+ 
 
 // -----------------------------------------------------------------------------
 
@@ -533,8 +553,12 @@ int main(int argc, char *argv[])
   {
     if (comm.rank == 0) std::cout << "Writing new potentials.\n";
     writePotentials(comm, lsms, crystal, local);
+    if (comm.rank == 0)
+    {
+      std::cout << "Writing restart file.\n";
+      writeRestart("i_lsms.restart", lsms, crystal, mix, potentialShifter, alloyDesc);
+    }
   }
-
 
   long fomScale = calculateFomScale(comm, local);
 
@@ -544,8 +568,11 @@ int main(int argc, char *argv[])
     printf("Fermi Energy = %.15lf Ry\n", lsms.chempot);
     printf("Total Energy = %.15lf Ry\n", lsms.totalEnergy);
     printf("timeScfLoop[rank==0] = %lf sec\n", timeScfLoop);
-    printf(".../lsms.nscf = %lf sec\n", timeScfLoop / (double)lsms.nscf);
-    printf("timeCalcChemPot[rank==0]/lsms.nscf = %lf sec\n", timeCalcChemPot / (double)lsms.nscf);
+    printf("     number of iteration:%d\n",iteration);
+    printf("timeScfLoop/iteration = %lf sec\n", timeScfLoop / (double)iteration);
+    // printf(".../lsms.nscf = %lf sec\n", timeScfLoop / (double)lsms.nscf);
+    printf("timeCalcChemPot[rank==0]/iteration = %lf sec\n", timeCalcChemPot / (double)iteration);
+    // printf("timeCalcChemPot[rank==0]/lsms.nscf = %lf sec\n", timeCalcChemPot / (double)lsms.nscf);
     printf("timeBuildLIZandCommList[rank==0]: %lf sec\n",
            timeBuildLIZandCommList);
     // fom = [ \sum_#atoms (LIZ * (lmax+1)^2)^3 ] / time per iteration
@@ -560,9 +587,11 @@ int main(int argc, char *argv[])
     }
     printf("FOM Scale = %lf\n",(double)fomScale);
     printf("Energy Contour Points = %ld\n",energyContourPoints);
-    printf("FOM = %lg/sec\n",fomScale * (double)lsms.nscf / timeScfLoop);
+    printf("FOM = %lg/sec\n",fomScale * (double)iteration / timeScfLoop);
+    // printf("FOM = %lg/sec\n",fomScale * (double)lsms.nscf / timeScfLoop);
     printf("FOM * energyContourPoints = = %lg/sec\n",
-            (double)energyContourPoints * (double)fomScale * (double)lsms.nscf / timeScfLoop);
+            (double)energyContourPoints * (double)fomScale * (double)iteration / timeScfLoop);
+    //         (double)energyContourPoints * (double)fomScale * (double)lsms.nscf / timeScfLoop);
   }
 
   local.tmatStore.unpinMemory();

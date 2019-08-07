@@ -236,12 +236,15 @@ int readInput(lua_State *L, LSMSSystemParameters &lsms, CrystalParameters &cryst
       luaGetIntegerFieldFromStack(L,"Zc",&crystal.types[crystal.num_types].Zc);
       luaGetIntegerFieldFromStack(L,"Zs",&crystal.types[crystal.num_types].Zs);
       luaGetIntegerFieldFromStack(L,"Zv",&crystal.types[crystal.num_types].Zv);
+      luaGetIntegerFieldFromStack(L,"forceZeroMoment",&crystal.types[crystal.num_types].forceZeroMoment);
       luaGetIntegerFieldFromStack(L,"alloy_class",&crystal.types[crystal.num_types].alloy_class);
       crystal.types[crystal.num_types].alloy_class--; // <-- zero-based indexing
       luaGetRealFieldFromStack(L,"rLIZ",&crystal.types[crystal.num_types].rLIZ);
       luaGetFieldFromStack(L,"rsteps");
       for(int j=0; j<4; j++) luaGetRealPositionFromStack(L,j+1,&crystal.types[crystal.num_types].rsteps[j]);
       lua_pop(L,1);
+      crystal.types[crystal.num_types].rad = 2.0;
+      luaGetRealFieldFromStack(L,"rad",&crystal.types[crystal.num_types].rad);
       crystal.types[crystal.num_types].first_instance=i;
       crystal.types[crystal.num_types].number_of_instances=1;
       crystal.type[i]=crystal.num_types;
@@ -496,6 +499,9 @@ int readInput(lua_State *L, LSMSSystemParameters &lsms, CrystalParameters &cryst
   snprintf(lsms.infoEvecFileOut,120,"info_evec_out");
   luaGetStrN(L,"infoEvecFileOut",lsms.infoEvecFileOut,120);
 
+  lsms.localAtomDataFile[0]=0;
+  luaGetStrN(L,"localAtomDataFile",lsms.localAtomDataFile,120);
+  
   // read default block size for zblock_lu
   lsms.zblockLUSize=0;
   luaGetInteger(L,"zblockLUSize",&lsms.zblockLUSize);

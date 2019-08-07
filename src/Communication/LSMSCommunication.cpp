@@ -52,6 +52,7 @@ void communicateParameters(LSMSCommunication &comm, LSMSSystemParameters &lsms,
     MPI_Pack(&lsms.alloy_out_type,1,MPI_INT,buf,s,&pos,comm.comm);
     MPI_Pack(lsms.infoEvecFileIn,128,MPI_CHAR,buf,s,&pos,comm.comm);
     MPI_Pack(lsms.infoEvecFileOut,128,MPI_CHAR,buf,s,&pos,comm.comm);
+    MPI_Pack(lsms.localAtomDataFile,128,MPI_CHAR,buf,s,&pos,comm.comm);
     MPI_Pack(&lsms.num_atoms,1,MPI_INT,buf,s,&pos,comm.comm);
     MPI_Pack(&lsms.nspin,1,MPI_INT,buf,s,&pos,comm.comm);
     MPI_Pack(&lsms.relativity,1,MPI_INT,buf,s,&pos,comm.comm);
@@ -120,6 +121,7 @@ void communicateParameters(LSMSCommunication &comm, LSMSSystemParameters &lsms,
     MPI_Unpack(buf,s,&pos,&lsms.alloy_out_type,1,MPI_INT,comm.comm);
     MPI_Unpack(buf,s,&pos,lsms.infoEvecFileIn,128,MPI_CHAR,comm.comm);
     MPI_Unpack(buf,s,&pos,lsms.infoEvecFileOut,128,MPI_CHAR,comm.comm);
+    MPI_Unpack(buf,s,&pos,lsms.localAtomDataFile,128,MPI_CHAR,comm.comm);
     MPI_Unpack(buf,s,&pos,&lsms.num_atoms,1,MPI_INT,comm.comm);
     crystal.num_atoms=lsms.num_atoms;
     MPI_Unpack(buf,s,&pos,&lsms.nspin,1,MPI_INT,comm.comm);
@@ -206,6 +208,9 @@ void communicateParameters(LSMSCommunication &comm, LSMSSystemParameters &lsms,
   for(int i=0; i<crystal.num_types; i++)
     if(crystal.types[i].lmax>crystal.maxlmax) crystal.maxlmax=crystal.types[i].lmax; 
   lsms.maxlmax=crystal.maxlmax;
+
+// set lsms.commRank to comm.rank
+  lsms.commRank = comm.rank;
 }
 
 void communicateSingleAtomData(LSMSCommunication &comm, int from, int to, int &local_id, AtomData &atom, int tag)
@@ -239,9 +244,15 @@ void communicateSingleAtomData(LSMSCommunication &comm, int from, int to, int &l
     MPI_Pack(atom.evecNew,3,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(atom.evecOut,3,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(atom.xvalws,2,MPI_DOUBLE,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.localEnergy,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.localMadelungEnergy,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.alloy_class,1,MPI_INT,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.omegaMT,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.omegaWS,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.rws,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.lmax,1,MPI_INT,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.nspin,1,MPI_INT,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.forceZeroMoment,1,MPI_INT,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.numc,1,MPI_INT,buf,s,&pos,comm.comm);
     t=atom.vr.n_row();
     MPI_Pack(&t,1,MPI_INT,buf,s,&pos,comm.comm);
@@ -299,10 +310,16 @@ void communicateSingleAtomData(LSMSCommunication &comm, int from, int to, int &l
     MPI_Unpack(buf,s,&pos,atom.evecNew,3,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,atom.evecOut,3,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,atom.xvalws,2,MPI_DOUBLE,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.localEnergy,1,MPI_DOUBLE,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.localMadelungEnergy,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.alloy_class,1,MPI_INT,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.omegaMT,1,MPI_DOUBLE,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.omegaWS,1,MPI_DOUBLE,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.rws,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.lmax,1,MPI_INT,comm.comm);
     atom.kkrsz = (atom.lmax+1)*(atom.lmax+1);
     MPI_Unpack(buf,s,&pos,&atom.nspin,1,MPI_INT,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.forceZeroMoment,1,MPI_INT,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.numc,1,MPI_INT,comm.comm);
 
     MPI_Unpack(buf,s,&pos,&t,1,MPI_INT,comm.comm);

@@ -73,7 +73,13 @@ void calculateLocalCharges(LSMSSystemParameters &lsms, LocalTypeInfo &local, int
       local.atom[i].xvalmt[0] = local.atom[i].dosckint[0];
       local.atom[i].xvalwsNew[0] = local.atom[i].dosint[0];
     }
-
+/*
+    // if(local.atom[i].forceZeroMoment && (lsms.n_spin_pola != 1))
+    // {
+    //   local.atom[i].xvalmt[0] = local.atom[i].xvalmt[1] = 0.5 * (local.atom[i].xvalmt[0] + local.atom[i].xvalmt[1]);
+    //   local.atom[i].xvalwsNew[0] = local.atom[i].xvalwsNew[1] = 0.5 * (local.atom[i].xvalwsNew[0] + local.atom[i].xvalwsNew[1]);
+    // }
+*/
     if (lsms.global.iprint > 0)
     {
       printf(" LOCAL WS Int[n(e)] = %18.11f\n", local.atom[i].qvalws);
@@ -581,6 +587,7 @@ void calculatePotential(LSMSCommunication &comm, LSMSSystemParameters &lsms, Loc
     //Real madterm = -(vmt1 - alpha_mad * local.atom[i].rhoInt);
     vmtSum += vmt * local.n_per_type[i];
     u0Sum += u0 * local.n_per_type[i];
+    local.atom[i].localMadelungEnergy = u0;
   }
 
 /*
@@ -873,6 +880,8 @@ void calculateMTZeroPotDiff(LSMSSystemParameters &lsms, LocalTypeInfo &local, in
           local.atom[i].vdifNew -= Real(i_vdif) * 4.256e-6;
       }
     }
+    // if(local.atom[i].forceZeroMoment && (lsms.n_spin_pola != 1))
+    //   local.atom[i].vdif = local.atom[i].vdifNew = 0.0;
   }
   
   return;

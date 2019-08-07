@@ -52,6 +52,8 @@ public:
   int alloy_in_type,alloy_out_type;
   char infoEvecFileIn[128];
   char infoEvecFileOut[128];
+  char localAtomDataFile[128];
+
   int mixing; // combines LSMS_1's mix_quant & mix_algor : -1 don't mix. mix_quant=mixing%4; mix_algor=mixing>>2;
               // mix_quant  0: charge, 1: potential
               // mix_algor  0: simple (linear) mixing; 1: broyden
@@ -106,6 +108,10 @@ public:
   Real u0;                     // Contribution of the Muffin-tin zero potential to the Coulomb energy
   Real totalEnergy;            // Total energy
   //Real pressure;               // Pressure
+
+// repeat the MPI rank from comm for reporting purposes
+  int commRank;
+
   Real largestCorestate;       // maximum of the core levels
 };
 
@@ -113,9 +119,10 @@ extern const char *potentialTypeName[];
 
 class AtomType {
 public:
-  AtomType() : pot_in_idx(-1), store_id(-1) {}
+  AtomType() : pot_in_idx(-1), store_id(-1), forceZeroMoment(0) {}
   char name[4];
   int lmax,Z,Zc,Zs,Zv;
+  int forceZeroMoment;
   int first_instance, number_of_instances;
   Real rsteps[4];
   Real rLIZ, rad;

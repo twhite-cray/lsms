@@ -25,10 +25,10 @@ void calculateDensities(LSMSSystemParameters &lsms, int iatom, int is, int ie, i
   {
     int isq=isp;
     if(lsms.n_spin_cant<2) isq=is;
-    atom.dos_real(ie,isq)=std::imag(dos(isp,iatom));
-    atom.evalsum[isq]+=std::imag(ede*dos(isp,iatom));
-    atom.dosint[isq]+=std::imag(dos(isp,iatom)*dele1);
-    atom.dosckint[isq]+=std::imag(dosck(isp,iatom)*dele1);
+    atom.dos_real(ie,isq)=std::imag(dos(isq,iatom));
+    atom.evalsum[isq]+=std::imag(ede*dos(isq,iatom));
+    atom.dosint[isq]+=std::imag(dos(isq,iatom)*dele1);
+    atom.dosckint[isq]+=std::imag(dosck(isq,iatom)*dele1);
     if(lsms.relativity!=full)
     {
       for(int ir=0; ir<green.l_dim1(); ir++)
@@ -60,8 +60,8 @@ void calculateDensities(LSMSSystemParameters &lsms, int iatom, int is, int ie, i
     {
       int isq=isp;
       if(lsms.n_spin_cant<2) isq=is;
-      atom.doslast[isq]=std::imag(dos(isp,iatom));
-      atom.doscklast[isq]=std::imag(dosck(isp,iatom));
+      atom.doslast[isq]=std::imag(dos(isq,iatom));
+      atom.doscklast[isq]=std::imag(dosck(isq,iatom));
       if(lsms.relativity!=full)
       {
         for(int ir=0; ir<green.l_dim1(); ir++)
@@ -158,6 +158,21 @@ void calculateChargeDensity(LSMSSystemParameters &lsms, AtomData &atom, Real edo
   exit(1);
 #endif
 
+  // if forceZeroMoment != force the up and down densities to be identical
+  if(atom.forceZeroMoment && (lsms.n_spin_pola!=1))
+  {
+    Real diff = 0.0;
+    for(int ir=0; ir<atom.jws; ir++)
+    {
+      diff += (rhonew(ir,0)-rhonew(ir,1))*(rhonew(ir,0)-rhonew(ir,1));
+      // rhonew(ir,1) = rhonew(ir,0) = 0.5*(rhonew(ir,0)+rhonew(ir,1));
+      // atom.corden(ir,1) = atom.corden(ir,0) = 0.5*(atom.corden(ir,0) + atom.corden(ir,1));
+      // atom.semcor(ir,1) = atom.semcor(ir,0) = 0.5*(atom.semcor(ir,0) + atom.semcor(ir,1));
+    }
+    printf("forceZeroAtom: diff(rhonew up, down)=%lg\n",std::sqrt(diff));
+    // atom.averageSpins();
+  }
+
   // calculate valence charge
   qvalmt=0.0;
   for(int is=0; is<lsms.n_spin_pola; is++)
@@ -199,6 +214,17 @@ void calculateChargeDensity(LSMSSystemParameters &lsms, AtomData &atom, Real edo
       rhonew(ir,is)+=0.5*(w1[ir+1]+w2[ir+1]+fac*(w1[ir+1]-w2[ir+1]));
   }
 
+  // if(atom.forceZeroMoment && (lsms.n_spin_pola!=1))
+  // {
+  //   for(int ir=0; ir<atom.jws; ir++)
+  //   { 
+  //     rhonew(ir,1) = rhonew(ir,0) = 0.5*(rhonew(ir,0)+rhonew(ir,1)); 
+  //     // atom.corden(ir,1) = atom.corden(ir,0) = 0.5*(atom.corden(ir,0) + atom.corden(ir,1));
+  //     // atom.semcor(ir,1) = atom.semcor(ir,0) = 0.5*(atom.semcor(ir,0) + atom.semcor(ir,1));
+  //   }
+  // }
+
+
 // calculate the rms between old and new charge densities
   for(int is=0; is<lsms.n_spin_pola; is++)
   {
@@ -228,7 +254,7 @@ void calculateAllLocalChargeDensities(LSMSSystemParameters &lsms, LocalTypeInfo 
                  local.atom[i].evec[2]*local.atom[i].evecNew[2];
     calculateChargeDensity(lsms, local.atom[i], edote,
                            local.atom[i].rhoNew, local.atom[i].qvalmt, &local.atom[i].qrms[0]); // &local_qrms[2*i]);
-    checkCharge(lsms, local.atom[i]);
+    // checkCharge(lsms, local.atom[i]);
   }
 
   int n=0;
@@ -243,3 +269,11 @@ void calculateAllLocalChargeDensities(LSMSSystemParameters &lsms, LocalTypeInfo 
   local.qrms[1] = local.qrms[1]/Real(n);
 }
 
+void checkAllLocalCharges(LSMSSystemParameters &lsms, LocalTypeInfo &local)
+{
+#pragma omp parallel for default(none) shared(lsms,local)
+  for(int i=0; i<local.num_local; i++)
+  {
+    checkCharge(lsms, local.atom[i]);
+  }
+}

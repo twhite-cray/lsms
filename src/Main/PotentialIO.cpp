@@ -1,3 +1,4 @@
+/* -*- c-file-style: "bsd"; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 #include <stdio.h>
 #include <hdf5.h>
 #include "Main/SystemParameters.hpp"
@@ -103,6 +104,11 @@ int loadPotentials(LSMSCommunication &comm,LSMSSystemParameters &lsms, CrystalPa
         }
       }
     }
+    // close the file
+    if(lsms.pot_in_type==0)
+    {
+      H5Fclose(fid);
+    }
   } else { // comm.rank!=0
     int local_id;
     for(int i=0; i<local.num_local; i++)
@@ -115,6 +121,18 @@ int loadPotentials(LSMSCommunication &comm,LSMSSystemParameters &lsms, CrystalPa
 // adjust the local potentials:
   for(int i=0; i<local.num_local; i++)
   {
+    if(local.atom[i].nspin != lsms.n_spin_pola)
+    {
+      printf("Input potential: %d spins != lsms setting: %d spins\n",
+             local.atom[i].nspin, lsms.n_spin_pola);
+      local.atom[i].changeNspin(lsms.n_spin_pola);
+    }
+    local.atom[i].forceZeroMoment = crystal.types[local.global_id[i]].forceZeroMoment;
+    // if(local.atom[i].forceZeroMoment)
+    // {
+    //   local.atom[i].averageSpins();
+    // }
+
     local.atom[i].generateRadialMesh();
     local.atom[i].ztotss=(Real)crystal.types[local.global_id[i]].Z;
     local.atom[i].zcorss=(Real)crystal.types[local.global_id[i]].Zc;
@@ -255,6 +273,12 @@ int writePotentials(LSMSCommunication &comm,LSMSSystemParameters &lsms, CrystalP
         }
       }
     }
+    // close the file
+    if(lsms.pot_out_type==0)
+    {
+      H5Fclose(fid);
+    }
+    
   } else { // comm.rank!=0
     for(int i=0; i<local.num_local; i++)
     {
