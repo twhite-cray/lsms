@@ -12,20 +12,22 @@
 #include "EnergyContourIntegration.hpp"
 #include "Misc/Coeficients.hpp"
 #include "calculateDensities.hpp"
+#include "MultipleScattering/linearSolvers.hpp"
 // #include <omp.h>
 #ifdef USE_NVTX
 #include <nvToolsExt.h>
 #endif
 
 #if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
-void copyTmatStoreToDevice(LocalTypeInfo &local);
+// void copyTmatStoreToDevice(LocalTypeInfo &local);
+
 #ifdef BUILDKKRMATRIX_GPU
 #include "Accelerator/buildKKRMatrix_gpu.hpp"
 extern std::vector<DeviceConstants> deviceConstants;
 // extern std::vector<void *> deviceConstants;
 // extern void * deviceStorage;
 #endif
-//#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
+
 #include "Accelerator/DeviceStorage.hpp"
 extern DeviceStorage *deviceStorage;
 #endif
@@ -198,12 +200,23 @@ void energyContourIntegration(LSMSCommunication &comm,LSMSSystemParameters &lsms
                &local.atom[i].wx[0],&local.atom[i].wy[0],&local.atom[i].wz[0]);
   }
 
+/*
 #if defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
   for(int i=0; i<local.num_local; i++)
   {
     deviceAtoms[i].copyFromAtom(local.atom[i]);
   }
 #endif
+*/
+
+  if(lsms.largestCorestate>lsms.energyContour.ebot)
+  {
+    if(lsms.global.iprint>=0)
+      printf("WARNING: Largest Core-State [%g] > Energy Contour Bottom [%g]\n",
+             lsms.largestCorestate, lsms.energyContour.ebot);
+    
+  }
+  
   // Real e_top;
   // e_top=lsms.energyContour.etop;
   // if(lsms.energyContour.etop==0.0) etop=lsms.chempot;
@@ -352,6 +365,19 @@ void energyContourIntegration(LSMSCommunication &comm,LSMSSystemParameters &lsms
 #ifdef BUILDKKRMATRIX_GPU
   copyTmatStoreToDevice(local);
 #endif
+#if defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
+  extern DeviceStorage *deviceStorage;
+  unsigned int buildKKRMatrixKernel = lsms.global.linearSolver & MST_BUILD_KKR_MATRIX_MASK;
+  if(buildKKRMatrixKernel == 0) buildKKRMatrixKernel = MST_BUILD_KKR_MATRIX_DEFAULT;
+  if(buildKKRMatrixKernel == MST_BUILD_KKR_MATRIX_ACCELERATOR)
+  {
+    if(lsms.global.iprint>=0) printf("copying atom data to accelerator\n");
+    deviceStorage->copyTmatStoreToDevice(local.tmatStore, local.blkSizeTmatStore);
+    for(int i=0; i<local.num_local; i++)
+      deviceAtoms[i].copyFromAtom(local.atom[i]);
+  }
+#endif
+  
 
   for(int ie=eGroupIdx[ig]; ie<eGroupIdx[ig+1]; ie++)
   {

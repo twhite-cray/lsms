@@ -47,6 +47,8 @@ extern "C" int* get_dev_ipvt_();
 extern "C" cudaStream_t get_stream_(const int &id);
 extern "C" cublasHandle_t get_cublas_handle_();
 extern "C" cudaEvent_t get_cuda_event_();
+#endif
+#if defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
 extern "C" Complex* get_host_m_(const int &max_nrmat_ns);
 #endif
 
@@ -57,6 +59,7 @@ private:
   static Complex *dev_m[MAX_THREADS], *dev_bgij[MAX_THREADS], *dev_tmat_n[MAX_THREADS];
   static Complex *dev_tau[MAX_THREADS], *dev_tau00[MAX_THREADS], *dev_t0[MAX_THREADS], *dev_t[MAX_THREADS];
   static int *dev_ipvt[MAX_THREADS];
+  static int *dev_info[MAX_THREADS];
 #if defined(ACCELERATOR_CUDA_C)
   static cublasHandle_t cublas_h[MAX_THREADS];
   static cusolverDnHandle_t cusolverDnHandle[MAX_THREADS];  
@@ -91,6 +94,7 @@ public:
   static Complex* getDevT() { return dev_t[omp_get_thread_num()]; }
   static Complex* getDevT0() { return dev_t0[omp_get_thread_num()]; }
   static int* getDevIpvt() { return dev_ipvt[omp_get_thread_num()]; }
+  static int* getDevInfo() { return dev_info[omp_get_thread_num()]; }
 #if defined (ACCELERATOR_CUDA_C)
   static cudaStream_t getStream(int i) { return stream[omp_get_thread_num()][i]; }
   static cudaEvent_t getEvent() { return event[omp_get_thread_num()]; }
@@ -125,7 +129,8 @@ public:
   int *LIZlmax;
   int *LIZStoreIdx;
   int numLIZ;
-  
+ 
+  DeviceAtom(void) : allocated(false) {} 
   int allocate(int lmax, int nspin, int _numLIZ);
   void copyFromAtom(AtomData &atom);
   void free();

@@ -107,6 +107,7 @@ public:
           exit(1);
         }
         cudaMalloc((void**)&dev_ipvt[i],N*sizeof(int));
+        cudaMalloc((void**)&dev_info[i],nThreads*sizeof(int));
 	err = cudaMalloc((void**)&dev_bgij[i],N*N*sizeof(Complex));
         if(err!=cudaSuccess)
         {
@@ -158,6 +159,7 @@ public:
       {
         cudaFree(dev_m[i]);
         cudaFree(dev_ipvt[i]);
+        cudaFree(dev_info[i]);
 #ifdef BUILDKKRMATRIX_GPU
         cudaFree(dev_bgij[i]);
         cudaFree(dev_tmat_n[i]);
@@ -223,6 +225,7 @@ Complex *DeviceStorage::dev_t[MAX_THREADS];
 void *DeviceStorage::dev_work[MAX_THREADS];
 size_t DeviceStorage::dev_workBytes[MAX_THREADS];
 int *DeviceStorage::dev_ipvt[MAX_THREADS];
+int *DeviceStorage::dev_info[MAX_THREADS];
 cublasHandle_t DeviceStorage::cublas_h[MAX_THREADS];
 cusolverDnHandle_t DeviceStorage::cusolverDnHandle[MAX_THREADS];
 cudaEvent_t DeviceStorage::event[MAX_THREADS];
@@ -233,7 +236,7 @@ size_t DeviceStorage::tmatStoreSize = 0;
 int DeviceStorage::blkSizeTmatStore = 0;
 int DeviceStorage::tmatStoreLDim = 0;
 int DeviceStorage::nThreads=1;
-bool initialized;
+bool initialized = false;
 
 std::vector<DeviceAtom> deviceAtoms;
 
@@ -268,7 +271,7 @@ void DeviceAtom::copyFromAtom(AtomData &atom)
     allocate(atom.lmax, atom.nspin, atom.numLIZ);
   }
   cudaMemcpy(LIZPos, &atom.LIZPos(0,0), atom.numLIZ*3*sizeof(Real), cudaMemcpyHostToDevice);
-  cudaMemcpy(LIZPos, &atom.LIZlmax[0], atom.numLIZ*sizeof(int), cudaMemcpyHostToDevice);
+  cudaMemcpy(LIZlmax, &atom.LIZlmax[0], atom.numLIZ*sizeof(int), cudaMemcpyHostToDevice);
   cudaMemcpy(LIZStoreIdx, &atom.LIZStoreIdx[0], atom.numLIZ*sizeof(int), cudaMemcpyHostToDevice);
 }
 
@@ -299,6 +302,8 @@ int DeviceConstants::allocate(AngularMomentumIndices &am, GauntCoeficients &c, I
   cudaMemcpy(ilp1, &ifactors.ilp1[0], ifactors.ilp1.size()*sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
   cudaMemcpy(illp, &ifactors.illp[0], ifactors.illp.size()*sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
   cudaMemcpy(cgnt, &c.cgnt[0], c.cgnt.size()*sizeof(double), cudaMemcpyHostToDevice);
+
+  return 0;
 }
 
 void DeviceConstants::free()

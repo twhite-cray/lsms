@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
   gauntCoeficients.init(lsms, lsms.angularMomentumIndices, sphericalHarmonicsCoeficients);
   iFactors.init(lsms, crystal.maxlmax);
 
-#if defined(ACCELERATOR_CUDA_C)
+#if defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
   deviceConstants.allocate(lsms.angularMomentumIndices, gauntCoeficients, iFactors);
 #endif
 
@@ -513,6 +513,9 @@ int main(int argc, char *argv[])
     checkAllLocalCharges(lsms, local);
     calculateTotalEnergy(comm, lsms, local, crystal);
 
+    // Calculate charge density rms
+    calculateLocalQrms(lsms, local);
+    
     // Mix charge density
     mixing -> updateChargeDensity(comm, lsms, local.atom);
     dTimePM = MPI_Wtime() - dTimePM;
@@ -654,7 +657,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  long long fomScale = calculateFomScale(comm, local);
+  double fomScale = calculateFomScaleDouble(comm, local);
 
   if (comm.rank == 0)
   {

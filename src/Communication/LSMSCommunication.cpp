@@ -243,6 +243,7 @@ void communicateSingleAtomData(LSMSCommunication &comm, int from, int to, int &l
     MPI_Pack(&atom.xstart,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.rmt,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.rInscribed,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
+    MPI_Pack(&atom.rCircumscribed,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(atom.header,80,MPI_CHAR,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.alat,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
     MPI_Pack(&atom.efermi,1,MPI_DOUBLE,buf,s,&pos,comm.comm);
@@ -309,6 +310,7 @@ void communicateSingleAtomData(LSMSCommunication &comm, int from, int to, int &l
     MPI_Unpack(buf,s,&pos,&atom.xstart,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.rmt,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.rInscribed,1,MPI_DOUBLE,comm.comm);
+    MPI_Unpack(buf,s,&pos,&atom.rCircumscribed,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,atom.header,80,MPI_CHAR,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.alat,1,MPI_DOUBLE,comm.comm);
     MPI_Unpack(buf,s,&pos,&atom.efermi,1,MPI_DOUBLE,comm.comm);
@@ -505,6 +507,23 @@ void globalAnd(LSMSCommunication &comm,bool &a)
   if(r==0) a=false;
 }
 
+double calculateFomScaleDouble(LSMSCommunication &comm, LocalTypeInfo &local)
+{
+  // fomScale = \sum_#atoms (LIZ * (lmax+1)^2)^3
+  double fomLocal = 0.0;
+  double fom  = 0.0;
+
+  for(int i=0; i<local.num_local; i++)
+  {
+    // printf("nrmat = %d\n",local.atom[i].nrmat);
+    double nrmatD = (double)local.atom[i].nrmat;
+    fomLocal += nrmatD * nrmatD * nrmatD;
+  }
+  // printf("fomLocal = %ld\n",fomLocal);
+  MPI_Allreduce(&fomLocal,&fom,1,MPI_DOUBLE,MPI_SUM,comm.comm);
+  // printf("fom = %ld\n",fom);
+  return fom;
+}
 
 long long calculateFomScale(LSMSCommunication &comm, LocalTypeInfo &local)
 {

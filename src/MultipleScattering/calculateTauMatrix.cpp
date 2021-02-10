@@ -99,7 +99,7 @@ void buildKKRMatrix(LSMSSystemParameters &lsms, LocalTypeInfo &local, AtomData &
     fprintf(of,"# tmatStore file for buildkkrmat test:\n");
     fprintf(of,"# line 4: num_store kkrsz Re(energy) Im(energy)\n");
     fprintf(of,"# following numstore*kkrsz*kkrsz lines: storeidx i j Re(t_ij) Im(t_ij)\n");
-    fprintf(of,"%4d %4d %lg %lg\n", local.tmatStoreGlobalIdx.size(),kkrsz_ns,std::real(energy),std::imag(energy)); 
+    fprintf(of,"%4zu %4d %lg %lg\n", local.tmatStoreGlobalIdx.size(),kkrsz_ns,std::real(energy),std::imag(energy)); 
     for(int idx=0; idx<local.tmatStoreGlobalIdx.size(); idx++)
     {
       for(int i=0; i<kkrsz_ns; i++)
@@ -359,9 +359,33 @@ void calculateTauMatrix(LSMSSystemParameters &lsms, LocalTypeInfo &local, AtomDa
     buildKKRMatrixCPU(lsms, local, atom, iie, energy, prel, m);
     break;
 #if defined(ACCELERATOR_CUDA_C)
-  case MST_BUILD_KKR_MATRIX_CUDA:
+  case MST_BUILD_KKR_MATRIX_ACCELERATOR:
+/*
+  {
+// test 
+//  Matrix<Real> testLIZPos(3,atom.numLIZ);
+//  Matrix<Complex> bgij(nrmat_ns, nrmat_ns);
+  Complex testIlp1[2*lsms.maxlmax + 1];
+//  cudaMemcpy(&bgij[0], devBgij, nrmat_ns*nrmat_ns*sizeof(Complex), cudaMemcpyDeviceToHost);
+//  cudaMemcpy(&testLIZPos[0], devAtom.LIZPos, 3*atom.numLIZ*sizeof(Real), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&testIlp1[0], DeviceConstants::ilp1, (2*lsms.maxlmax + 1)*sizeof(Complex), cudaMemcpyDeviceToHost);  
+  printf("calculateTauMatrix:\n");
+  for(int l=0; l<2*lsms.maxlmax; l++)
+  {
+    printf("l=%d : ilp1 [%g + %gi] | DeviceConstats::ilp1 [%g + %gi]\n",l,IFactors::ilp1[l].real(),IFactors::ilp1[l].imag(), testIlp1[l].real(), testIlp1[l].imag());
+  }
+  }
+*/
     devM = deviceStorage->getDevM();
+    // printf("entering buildKKRMatrixCuda:\n");
     buildKKRMatrixCuda(lsms, local, atom, *deviceStorage, deviceAtoms[localAtomIndex], ispin, iie, energy, prel,
+                       devM);
+    break;
+#endif
+#if defined(ACCELERATOR_HIP)
+  case MST_BUILD_KKR_MATRIX_ACCELERATOR:
+    devM = deviceStorage->getDevM();
+    buildKKRMatrixHip(lsms, local, atom, *deviceStorage, deviceAtoms[localAtomIndex], ispin, iie, energy, prel,
                        devM);
     break;
 #endif
@@ -408,7 +432,7 @@ void calculateTauMatrix(LSMSSystemParameters &lsms, LocalTypeInfo &local, AtomDa
     default: break; // do nothing. We are using the CPU matrix
     } break;
 #if defined(ACCELERATOR_CUDA_C)
-  case MST_BUILD_KKR_MATRIX_CUDA:
+  case MST_BUILD_KKR_MATRIX_ACCELERATOR:
     // built on GPU:
     switch(linearSolver)
     {
@@ -427,6 +451,37 @@ void calculateTauMatrix(LSMSSystemParameters &lsms, LocalTypeInfo &local, AtomDa
       transferT0MatrixToGPUCuda(devT0, lsms, local, atom, iie);
       break;
 #ifdef ACCELERATOR_HIP
+    case MST_LINEAR_SOLVER_ZGETRF_ROCSOLVER:
+      printf("MIXING HIP AND CUDA KERNELS (%x)!!!\n",buildKKRMatrixKernel);
+    exit(1);
+#endif
+    default: break; // do nothing. We are using the GPU matrix
+    } break;
+#endif
+#if defined(ACCELERATOR_HIP)
+  case MST_BUILD_KKR_MATRIX_ACCELERATOR:
+    // built on GPU:
+    switch(linearSolver)
+    {
+    case MST_LINEAR_SOLVER_ZGESV:
+    case MST_LINEAR_SOLVER_ZGETRF:
+    case MST_LINEAR_SOLVER_ZCGESV:
+    case MST_LINEAR_SOLVER_ZBLOCKLU_F77:
+    case MST_LINEAR_SOLVER_ZBLOCKLU_CPP:
+      transferMatrixFromGPUHip(m, (deviceDoubleComplex *)devM);
+      break;
+    case MST_LINEAR_SOLVER_ZGETRF_ROCSOLVER:
+      devT0 = deviceStorage->getDevT0();
+      transferT0MatrixToGPUHip(devT0, lsms, local, atom, iie);
+      break;
+#ifdef ACCELERATOR_CUDA_C
+    case MST_LINEAR_SOLVER_ZGETRF_CUBLAS:
+    case MST_LINEAR_SOLVER_ZBLOCKLU_CUBLAS:
+    case MST_LINEAR_SOLVER_ZZGESV_CUSOLVER:
+    case MST_LINEAR_SOLVER_ZGETRF_CUSOLVER:
+      printf("MIXING HIP AND CUDA KERNELS (%x)!!!\n",buildKKRMatrixKernel);
+      exit(1);
+      break; 
 #endif
     default: break; // do nothing. We are using the GPU matrix
     } break;
@@ -669,8 +724,9 @@ void calculateAllTauMatrices(LSMSCommunication &comm,LSMSSystemParameters &lsms,
 */
 
   Complex *m_dat=NULL;
-#if (defined ACCELERATOR_CULA) || defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C)
+#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
   m_dat=get_host_m_(max_nrmat_ns);
+//  printf("m_dat = %p\n",m_dat);
 #else
   m_dat=NULL;
 #endif
@@ -681,7 +737,7 @@ void calculateAllTauMatrices(LSMSCommunication &comm,LSMSSystemParameters &lsms,
             shared(lsms,local,energy,prel,tau00_l,max_nrmat_ns,m_dat,deviceConstants,deviceStorage) \
             firstprivate(iie) num_threads(lsms.global.GPUThreads)
 #else
-#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C)
+#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
 #pragma omp parallel for default(none) \
             shared(lsms,local,energy,prel,tau00_l,max_nrmat_ns,m_dat,deviceStorage) \
             firstprivate(iie) num_threads(lsms.global.GPUThreads)
@@ -694,7 +750,7 @@ void calculateAllTauMatrices(LSMSCommunication &comm,LSMSSystemParameters &lsms,
   {
     // printf("Num threads: %d\n",omp_get_num_threads());
     // printf("i: %d, threadId :%d\n",i,omp_get_thread_num());
-#if defined(ACCELERATOR_CULA) || defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C)
+#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
     Matrix<Complex> m(max_nrmat_ns,max_nrmat_ns,m_dat+max_nrmat_ns*max_nrmat_ns*omp_get_thread_num());
 #else
     Matrix<Complex> m(max_nrmat_ns,max_nrmat_ns);
@@ -731,7 +787,7 @@ void calculateAllTauMatrices(LSMSCommunication &comm,LSMSSystemParameters &lsms,
     free(dat);
 #endif
 */
-#if defined(ACCELERATOR_CULA) || defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C)
+#if defined(ACCELERATOR_LIBSCI) || defined(ACCELERATOR_CUDA_C) || defined(ACCELERATOR_HIP)
 
 #else
   m_dat=NULL;
